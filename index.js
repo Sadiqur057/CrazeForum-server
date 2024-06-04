@@ -61,6 +61,19 @@ async function run() {
     }
 
 
+    const verifyAdmin = async (req, res, next) => {
+      console.log(req.decoded)
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query)
+      const isAdmin = user?.isAdmin === true;
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" })
+      }
+      next()
+    }
+
+
 
 
     // Send a ping to confirm a successful connection
