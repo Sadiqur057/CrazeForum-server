@@ -104,6 +104,15 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/posts/:email', async (req, res) => {
+      const email = req.params.email;
+      console.log(email)
+      const query = { author_email: email }
+      const result = await postCollection.find(query).toArray();
+      console.log('result', result)
+      res.send(result)
+    })
+
 
 
 
