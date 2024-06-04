@@ -119,6 +119,32 @@ async function run() {
       res.send(result)
     })
 
+    app.post('/post/upvote/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const update = req.body.update;
+      console.log("upvote", id, update)
+      const updatedDoc = {
+        $inc: { up_vote_count: update }
+      }
+      const result = await postCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+      console.log(id, result)
+    })
+
+    app.post('/post/downvote/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const update = req.body.update;
+      console.log("downvote", id, update)
+      const updatedDoc = {
+        $inc: { down_vote_count: update }
+      }
+      const result = await postCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+      console.log(id, result)
+    })
+
 
 
 
