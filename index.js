@@ -95,6 +95,15 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/post/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log("id", id)
+      const query = { _id: new ObjectId(id) }
+      const result = await postCollection.findOne(query);
+      console.log('result', result)
+      res.send(result)
+    })
+
 
 
 
