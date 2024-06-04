@@ -113,6 +113,12 @@ async function run() {
       res.send(result)
     })
 
+    app.post('/post',async(req,res)=>{
+      const data = req.body;
+      const result = await postCollection.insertOne(data)
+      res.send(result)
+    })
+
 
 
 
