@@ -145,7 +145,18 @@ async function run() {
       console.log(id, result)
     })
 
+    // comments related api
 
+    app.get('/comments',async(req,res)=>{
+      const result = await commentCollection.find().toArray()
+      res.send(result)
+    })
+
+    app.post('/comment',async(req,res)=>{
+      const data = req.body;
+      const result = await commentCollection.insertOne(data)
+      res.send(result)
+    })
 
 
     // Send a ping to confirm a successful connection
