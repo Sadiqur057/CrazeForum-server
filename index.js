@@ -89,6 +89,13 @@ async function run() {
     })
 
 
+    // post related api
+    app.get('/posts', async (req, res) => {
+      const result = await postCollection.find().toArray();
+      res.send(result)
+    })
+
+
 
 
     // Send a ping to confirm a successful connection
