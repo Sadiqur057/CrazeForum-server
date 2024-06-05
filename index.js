@@ -221,6 +221,12 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/reportedComments', async (req, res) => {
+      const query = { isReported: true };
+      const result = await commentCollection.find(query).toArray()
+      res.send(result)
+    })
+
 
 
 
