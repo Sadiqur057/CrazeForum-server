@@ -227,6 +227,13 @@ async function run() {
       res.send(result)
     })
 
+    app.delete('/comment/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const result = await commentCollection.deleteOne(filter)
+      res.send(result)
+    })
+
 
 
 
