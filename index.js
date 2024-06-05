@@ -240,6 +240,11 @@ async function run() {
       const result = await announcementCollection.insertOne(data)
       res.send(result)
     })
+    app.get('/announcements', async (req, res) => {
+      const result = await announcementCollection.find().toArray()
+      res.send(result)
+    })
+
 
 
 
