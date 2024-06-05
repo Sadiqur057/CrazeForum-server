@@ -253,7 +253,17 @@ async function run() {
       res.send({ postCounts, userCounts, commentCounts })
     })
 
+    // tags related api
+    app.get('/tags', async (req, res) => {
+      const result = await tagCollection.find({ tagName: { $ne: "all" } }).toArray();
+      res.send(result)
+    })
 
+    app.post('/tags', async (req, res) => {
+      const data = req.body;
+      const result = await tagCollection.insertOne(data)
+      res.send(result)
+    })
 
 
     // Send a ping to confirm a successful connection
