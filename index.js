@@ -32,6 +32,9 @@ async function run() {
     const postCollection = DB.collection('posts');
     const userCollection = DB.collection('users');
     const commentCollection = DB.collection('comments');
+    const announcementCollection = DB.collection('announcements')
+    const tagCollection = DB.collection('tags')
+    // const reportCollection = DB.collection('reports')
 
 
     // jwt related api
@@ -75,6 +78,12 @@ async function run() {
 
 
     // user related api
+
+    app.get('/users', async (req, res) => {
+      const result = await userCollection.find().toArray()
+      res.send(result)
+    })
+
     app.post('/users', async (req, res) => {
       const user = req.body;
       // insert email if user does not exists
@@ -88,6 +97,22 @@ async function run() {
       res.send(result)
     })
 
+    app.put('/user/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id)
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          'isAdmin': true
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc)
+      console.log(result)
+      res.send(result)
+    })
+
+
+
 
     // post related api
     app.get('/posts', async (req, res) => {
@@ -100,7 +125,7 @@ async function run() {
       console.log("id", id)
       const query = { _id: new ObjectId(id) }
       const result = await postCollection.findOne(query);
-      console.log('result', result)
+      // console.log('result', result)
       res.send(result)
     })
 
@@ -109,11 +134,11 @@ async function run() {
       console.log(email)
       const query = { author_email: email }
       const result = await postCollection.find(query).toArray();
-      console.log('result', result)
+      // console.log('result', result)
       res.send(result)
     })
 
-    app.post('/post',async(req,res)=>{
+    app.post('/post', async (req, res) => {
       const data = req.body;
       const result = await postCollection.insertOne(data)
       res.send(result)
@@ -129,7 +154,7 @@ async function run() {
       }
       const result = await postCollection.updateOne(filter, updatedDoc)
       res.send(result)
-      console.log(id, result)
+      // console.log(id, result)
     })
 
     app.post('/post/downvote/:id', async (req, res) => {
@@ -142,21 +167,61 @@ async function run() {
       }
       const result = await postCollection.updateOne(filter, updatedDoc)
       res.send(result)
-      console.log(id, result)
+      // console.log(id, result)
+    })
+
+    app.get('/postByTag/:tag', async (req, res) => {
+      const tag = req.params.tag;
+      console.log(tag)
+
+      if (tag === "all") {
+        const result = await postCollection.find().toArray()
+        console.log(result)
+        return res.send(result)
+      }
+
+      const filter = { tag: tag }
+      const result = await postCollection.find(filter).toArray()
+      res.send(result)
+    })
+
+    app.delete('/post/:id',async(req,res)=>{
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)}
+      const result = await postCollection.deleteOne(filter)
+      res.send(result)
     })
 
     // comments related api
 
-    app.get('/comments',async(req,res)=>{
+    app.get('/comments', async (req, res) => {
       const result = await commentCollection.find().toArray()
       res.send(result)
     })
 
-    app.post('/comment',async(req,res)=>{
+    app.post('/comment', async (req, res) => {
       const data = req.body;
       const result = await commentCollection.insertOne(data)
       res.send(result)
     })
+
+    app.put('/comment', async (req, res) => {
+      const id = req.query?.id;
+      const feedback = req.query?.feedback
+      console.log(id, feedback)
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          'isReported': true,
+          'feedback': feedback
+        }
+      }
+      const result = await commentCollection.updateOne(filter, updatedDoc)
+      console.log(result)
+      res.send(result)
+    })
+
+
 
 
     // Send a ping to confirm a successful connection
