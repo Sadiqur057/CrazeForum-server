@@ -245,6 +245,14 @@ async function run() {
       res.send(result)
     })
 
+    // stats related api
+    app.get('/stats', async (req, res) => {
+      const postCounts = await postCollection.estimatedDocumentCount()
+      const userCounts = await userCollection.estimatedDocumentCount()
+      const commentCounts = await commentCollection.estimatedDocumentCount()
+      res.send({ postCounts, userCounts, commentCounts })
+    })
+
 
 
 
