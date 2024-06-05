@@ -234,6 +234,12 @@ async function run() {
       res.send(result)
     })
 
+    // announcement related api
+    app.post('/announcement', async (req, res) => {
+      const data = req.body;
+      const result = await announcementCollection.insertOne(data)
+      res.send(result)
+    })
 
 
 
