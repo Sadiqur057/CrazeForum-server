@@ -5,6 +5,7 @@ const cors = require('cors');
 const port = process.env.PORT || 5000;
 const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 
 app.use(cors())
 app.use(express.json())
@@ -25,7 +26,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
 
     const DB = client.db('CrazeForumDB');
@@ -34,7 +35,7 @@ async function run() {
     const commentCollection = DB.collection('comments');
     const announcementCollection = DB.collection('announcements')
     const tagCollection = DB.collection('tags')
-    // const reportCollection = DB.collection('reports')
+    const paymentCollection = DB.collection('payments')
 
 
     // jwt related api
@@ -77,6 +78,25 @@ async function run() {
     }
 
 
+
+    // admin related api
+
+    app.get('/user/admin/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      console.log("email", email)
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" })
+      }
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if (user) {
+        admin = user?.isAdmin === true
+      }
+      res.send({ admin })
+    })
+
+
     // user related api
 
     app.get('/users', async (req, res) => {
@@ -84,12 +104,47 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/user/', verifyToken, verifyAdmin, async (req, res) => {
+      const username = req.query.username || ""
+      const page = parseInt(req.query.page) || 0
+      console.log('api called', username, page)
+      const pipeline = [];
+      const countPipeline = []
+
+      if (username !== "") {
+        pipeline.push({
+          $match: { name: { $regex: username, $options: 'i' } }
+        })
+        countPipeline.push({
+          $match: { name: { $regex: username, $options: 'i' } }
+        })
+      } else {
+        pipeline.push(
+          {
+            $sort: { _id: -1 }
+          }
+        )
+      }
+      countPipeline.push({ $count: "count" })
+
+      const [countResult] = await userCollection.aggregate(countPipeline).toArray();
+      const count = countResult ? countResult.count : 0;
+
+      pipeline.push(
+        { $skip: page * 10 },
+        { $limit: 10 }
+      );
+
+      const result = await userCollection.aggregate(pipeline).toArray();
+      // console.log(result)
+      res.send({ count, result });
+    })
+
     app.post('/users', async (req, res) => {
       const user = req.body;
       // insert email if user does not exists
       const query = { email: user.email }
       const existingUser = await userCollection.findOne(query)
-      console.log('user', existingUser)
       if (existingUser) {
         return res.send({ message: "Existing User", insertedId: null });
       }
@@ -97,13 +152,15 @@ async function run() {
       res.send(result)
     })
 
-    app.put('/user/:id', async (req, res) => {
-      const id = req.params.id;
-      console.log(id)
-      const filter = { _id: new ObjectId(id) }
+    app.put('/editProfile/:email', verifyToken, async (req, res) => {
+      const email = req.params.email
+      const bio = req.body?.bio || ""
+      const name = req.body?.name
+      const filter = { email: email }
       const updatedDoc = {
         $set: {
-          'isAdmin': true
+          bio: bio,
+          name: name
         }
       }
       const result = await userCollection.updateOne(filter, updatedDoc)
@@ -111,34 +168,101 @@ async function run() {
       res.send(result)
     })
 
+    app.get('/userInfo/:email',verifyToken,async(req,res)=>{
+      const email = req.params.email
+      const filter = { email: email }
+      const result = await userCollection.findOne(filter)
+      console.log(result)
+      res.send(result)
+    })
 
 
+    app.put('/user/:id', verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          'isAdmin': true
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc)
+      // console.log(result)
+      res.send(result)
+    })
+
+    app.put('/user/badge/:email', async (req, res) => {
+      const email = req.params.email;
+      const filter = { email: email }
+      const updatedDoc = {
+        $set: {
+          badge: 'gold'
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc)
+      // console.log(result)
+      res.send(result)
+    })
+
+    app.get('/user/badge/:email', async (req, res) => {
+      const email = req.params.email;
+      const filter = { email: email }
+      const result = await userCollection.findOne(filter, { projection: { badge: 1 } })
+      // console.log(result)
+      res.send(result)
+    })
+
+
+    // payments related api
+
+    // payment Intent
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100)
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      })
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    })
+
+    app.post('/payments', async (req, res) => {
+      const data = req.body;
+      const result = await paymentCollection.insertOne(data);
+      // console.log(result)
+      res.send(result)
+    })
 
     // post related api
     app.get('/posts', async (req, res) => {
-      const result = await postCollection.find().toArray();
+      const result = await postCollection.find().sort({ posted_time: -1 }).toArray();
       res.send(result)
     })
 
     app.get('/post/:id', async (req, res) => {
       const id = req.params.id;
-      console.log("id", id)
+      // console.log("id", id)
       const query = { _id: new ObjectId(id) }
       const result = await postCollection.findOne(query);
       // console.log('result', result)
       res.send(result)
     })
 
-    app.get('/posts/:email', async (req, res) => {
+    app.get('/posts/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
-      console.log(email)
+      const page = req.query?.page;
+      console.log(page)
+
       const query = { author_email: email }
-      const result = await postCollection.find(query).toArray();
-      // console.log('result', result)
-      res.send(result)
+      const userPostCounts = await postCollection.countDocuments(query);
+      const result = await postCollection.find(query).skip(page * 10).limit(10).sort({ _id: -1 }).toArray();
+      res.send({ userPostCounts, result });
     })
 
-    app.post('/post', async (req, res) => {
+    app.post('/post', verifyToken, async (req, res) => {
       const data = req.body;
       const result = await postCollection.insertOne(data)
       res.send(result)
@@ -148,7 +272,7 @@ async function run() {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
       const update = req.body.update;
-      console.log("upvote", id, update)
+      // console.log("upvote", id, update)
       const updatedDoc = {
         $inc: { up_vote_count: update }
       }
@@ -161,42 +285,93 @@ async function run() {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
       const update = req.body.update;
-      console.log("downvote", id, update)
+      // console.log("downvote", id, update)
       const updatedDoc = {
         $inc: { down_vote_count: update }
       }
       const result = await postCollection.updateOne(filter, updatedDoc)
       res.send(result)
-      // console.log(id, result)
     })
 
-    app.get('/postByTag/:tag', async (req, res) => {
-      const tag = req.params.tag;
-      console.log(tag)
 
-      if (tag === "all") {
-        const result = await postCollection.find().toArray()
-        console.log(result)
-        return res.send(result)
+
+    app.get('/postByTag', async (req, res) => {
+      const tag = req.query?.tag || "";
+      const sorted = req.query?.sorted === 'true';
+      const page = parseInt(req.query.page) || 0
+      console.log(tag, sorted, page)
+      const pipeline = [];
+      const countPipeline = [];
+
+      if (tag !== "") {
+        pipeline.push({
+          $match: { tag: { $regex: tag, $options: 'i' } }
+        });
+        countPipeline.push({
+          $match: { tag: { $regex: tag, $options: 'i' } }
+        });
       }
 
-      const filter = { tag: tag }
-      const result = await postCollection.find(filter).toArray()
-      res.send(result)
+      if (sorted) {
+        pipeline.push(
+          {
+            $addFields: {
+              voteDifference: {
+                $subtract: ['$up_vote_count', '$down_vote_count']
+              }
+            }
+          },
+          {
+            $sort: {
+              voteDifference: -1
+            }
+          }
+        )
+      } else {
+        pipeline.push(
+          {
+            $sort:
+              { posted_time: -1 }
+          }
+        )
+      }
+
+      countPipeline.push({ $count: "count" });
+
+      const [countResult] = await postCollection.aggregate(countPipeline).toArray();
+      const count = countResult ? countResult.count : 0;
+
+
+      pipeline.push(
+        { $skip: page * 5 },
+        { $limit: 5 }
+      );
+
+      const result = await postCollection.aggregate(pipeline).toArray();
+      console.log(result)
+      res.send({ count, result });
+
+      // const result = await postCollection.aggregate(pipeline).skip(page * 5).limit(5).toArray();
+      // res.send(result)
     })
 
-    app.delete('/post/:id',async(req,res)=>{
+    app.delete('/post/:id', async (req, res) => {
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)}
+      const filter = { _id: new ObjectId(id) }
       const result = await postCollection.deleteOne(filter)
       res.send(result)
     })
 
     // comments related api
 
-    app.get('/comments', async (req, res) => {
-      const result = await commentCollection.find().toArray()
-      res.send(result)
+    app.get('/comments/:id', async (req, res) => {
+      const postId = req.params.id
+      const page = req.query.page;
+      console.log('current page', page)
+      const filter = { post_id: postId }
+      const commentCounts = await commentCollection.countDocuments(filter);
+      const result = await commentCollection.find(filter).skip(page * 10).limit(10).sort({ _id: -1 }).toArray()
+      res.send({ commentCounts, result });
     })
 
     app.post('/comment', async (req, res) => {
@@ -208,7 +383,7 @@ async function run() {
     app.put('/comment', async (req, res) => {
       const id = req.query?.id;
       const feedback = req.query?.feedback
-      console.log(id, feedback)
+      // console.log(id, feedback)
       const filter = { _id: new ObjectId(id) }
       const updatedDoc = {
         $set: {
@@ -217,17 +392,20 @@ async function run() {
         }
       }
       const result = await commentCollection.updateOne(filter, updatedDoc)
-      console.log(result)
+      // console.log(result)
       res.send(result)
     })
 
-    app.get('/reportedComments', async (req, res) => {
+    app.get('/reportedComments', verifyToken, verifyAdmin, async (req, res) => {
+      const page = req.query.page;
+      console.log('current page', page)
       const query = { isReported: true };
-      const result = await commentCollection.find(query).toArray()
-      res.send(result)
+      const reportedCommentsCount = await commentCollection.countDocuments(query)
+      const result = await commentCollection.find(query).skip(page * 10).limit(10).toArray()
+      res.send({ result, reportedCommentsCount })
     })
 
-    app.delete('/comment/:id', async (req, res) => {
+    app.delete('/comment/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
       const result = await commentCollection.deleteOne(filter)
@@ -235,7 +413,7 @@ async function run() {
     })
 
     // announcement related api
-    app.post('/announcement', async (req, res) => {
+    app.post('/announcement', verifyToken, verifyAdmin, async (req, res) => {
       const data = req.body;
       const result = await announcementCollection.insertOne(data)
       res.send(result)
@@ -246,12 +424,13 @@ async function run() {
     })
 
     // stats related api
-    app.get('/stats', async (req, res) => {
+    app.get('/stats', verifyToken, async (req, res) => {
       const postCounts = await postCollection.estimatedDocumentCount()
       const userCounts = await userCollection.estimatedDocumentCount()
       const commentCounts = await commentCollection.estimatedDocumentCount()
       res.send({ postCounts, userCounts, commentCounts })
     })
+
 
     // tags related api
     app.get('/tags', async (req, res) => {
@@ -267,8 +446,8 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
